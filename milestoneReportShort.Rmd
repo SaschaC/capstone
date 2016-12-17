@@ -1,0 +1,162 @@
+---
+title: Coursera Data Science - Capstone Project
+subtitle: Trigram Model Word Prediction
+author: "Sascha C."
+date: "3 december 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+abstract: This report investigates unigram, bigram, and trigram frequencies in a Twitter, a Blog, and a News corpus. Each of the three corpora is provided by Swiftkey (download [here](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip)).
+---
+# Tokenization
+In this section, samples from each of the three corpora are tokenized into unigrams, bigrams and trigrams. First, the three corpora are read in, and samples are taken from each corpus. 
+```{r, warning=FALSE, cache=TRUE,warning=F,message=F}
+require(data.table)
+require(ggplot2)
+library(dplyr)
+library(tidytext)
+library(tidyr)
+library(tokenizers)
+#reading in corpora
+twitter=scan(file="./corpora/en_US/en_US.twitter.txt",what ="character", sep="\n",encoding = "UTF-8")
+blogs = scan(file="./corpora/en_US/en_US.blogs.txt",what ="character", sep="\n",encoding = "UTF-8")
+news = scan(file="./corpora/en_US/en_US.news.txt",what ="character",
+sep="\n",encoding = "UTF-8")
+#sample function 
+get_sample<-function(data,sampleSize){
+  sample(data,floor(sampleSize*length(data)),replace=F)
+}
+#taking samples
+sampleSize=0.03
+twitter_sample<-get_sample(twitter,sampleSize)
+blogs_sample<-get_sample(blogs,sampleSize)
+news_sample<-get_sample(news,sampleSize)
+twitter_sample[1];blogs_sample[1];news_sample[1];
+```
+The following table gives a breakdown of corpora and sample sizes:
+```{r table1, cache = T, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+require(pander)
+table<-data.frame(Twitter=c(length(twitter),length(twitter_sample),
+                            (length(twitter_sample)/length(twitter))*100), 
+                  Blogs=c(length(blogs),length(blogs_sample),
+                          (length(blogs_sample)/length(blogs))*100),
+                  News=c(length(news),length(news_sample),
+                         (length(news_sample)/length(news))*100)
+)
+rownames(table)=c("Corpus size (n)","Sample size (n)", "Sample size (%)")
+panderOptions('table.split.table', Inf)
+set.caption("Table 1. Size of corpora and corresponding samples; n = number of lines.")
+pander(table, style = 'rmarkdown')
+rm(blogs,news,twitter)
+```
+
+Next, the samples are tokenized into unigrams, bigrams, and trigrams.
+```{r, warning=FALSE, cache=TRUE}
+#collapsing sample vectors into single element vectors
+twitter_sample<-twitter_sample%>%paste(collapse=" ")
+blogs_sample<-blogs_sample%>%paste(collapse=" ")
+news_sample<-news_sample%>%paste(collapse=" ")
+#tokenize function
+token_df<- function(text,corpus_name,ngrams){
+  t=tokenize_ngrams(text, lowercase = TRUE, n = ngrams,
+                    stopwords = character(), ngram_delim = " ", simplify = F)  
+  name_vector=rep(corpus_name,length(t[[1]]))
+  d=data.table(term=t[[1]], corpus=name_vector)
+}
+#Creating data tables for unigrams, bigrams, trigrams
+start.time <- Sys.time()
+set.seed(1122)
+unigramTokens<-rbind(token_df(twitter_sample,"twitter",1L),token_df(blogs_sample,"blogs",1L),token_df(news_sample,"news",1L))
+bigramTokens<-rbind(token_df(twitter_sample,"twitter",2L),token_df(blogs_sample,"blogs",2L),token_df(news_sample,"news",2L))
+trigramTokens<-rbind(token_df(twitter_sample,"twitter",3L),token_df(blogs_sample,"blogs",3L),token_df(news_sample,"news",3L))
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+message("Tokenization took ",time.taken," seconds.")
+unigramTokens[1,];bigramTokens[1,];trigramTokens[1,]
+```
+
+#  Exploratory analyses
+## Word frequency
+What are the 3 most frequent words in each of the 3 corpus samples? 
+```{r, warning=FALSE, cache=TRUE, message=F}
+# Calculating frequencies
+dtFrequencies<-unigramTokens[,.(.N),by=.(term,corpus)]
+dtFrequencies<-dtFrequencies[,total:=(sum(N)),by=corpus]
+dtFrequencies<-dtFrequencies[,termFrequency:=(N/total),by=corpus]
+# Getting the three most frequent unigrams for each sample
+dtFrequencies%>%
+  group_by(corpus) %>% 
+  arrange(desc(termFrequency))%>% 
+  top_n(3) %>% ungroup
+```
+How are word frequencies distributed?
+```{r, warning=FALSE, cache=TRUE, message=F}
+# Plot histogram of frequencies
+plotDtFrequencies<-ggplot(dtFrequencies, aes(termFrequency,fill=corpus)) +
+  geom_histogram(show.legend = FALSE)+
+  xlim(NA, 0.0025) +
+  facet_wrap(~corpus, ncol = 1, scales = "free_y")
+plotDtFrequencies
+```
+
+## Inverse document frequency
+What are the 10 most important words in each sample?  
+To answer this, I calculated the **[inverse document frequencies](https://en.wikipedia.org/wiki/Tf-idf) (idf)** of words using the ```bind_tf_idf()``` function from the [tidytext R package](http://tidytextmining.com/tfidf.html). The **idf** of a word is intended to reflect how important it is to a document in a collection or corpus: 
+```{r, warning=FALSE, cache=TRUE,message=F}
+dtFrequencies<- dtFrequencies %>%
+  bind_tf_idf(term, corpus, N)%>%
+  group_by(corpus) %>% 
+  arrange(desc(tf_idf))%>% 
+  top_n(10) %>% ungroup %>%
+  mutate(term = factor(term, levels =unique(term)))
+plotTfIdfFrequencies<-ggplot(dtFrequencies, aes(term, tf_idf, fill = corpus)) +
+  geom_bar(alpha = 0.8, stat = "identity", show.legend = FALSE) +
+  labs(title = "Highest idf words in Corpora",
+       x = NULL, y = "idf") +
+  facet_wrap(~corpus, ncol = 3,scales="free")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+plotTfIdfFrequencies
+```
+
+## Token coverage
+What proportion of all unigram tokens do the the 100 most frequent unigram types cover? First, create tables:
+```{r, warning=FALSE, cache=TRUE}
+unigramFrequencies<-unigramTokens[,.(.N),by=term]
+unigramFrequencies<-unigramFrequencies[order(-rank(N))]
+i<-2; cumSum<-unigramFrequencies[1,N]
+for(i in 2:nrow(unigramFrequencies)){cumSum=c(cumSum,cumSum[i-1]+unigramFrequencies[i,N])}
+unigramFrequencies[,cumSum:=cumSum/sum(N)]
+```
+Then, plot the proportion of coverage by the first 100 frequency ordered unigrams:
+```{r, warning=FALSE, cache=TRUE}
+# Plot proportion of coverage by frequency ordered unigrams
+plotFrequencies<-ggplot(unigramFrequencies[1:100,], aes(as.integer(rownames(unigramFrequencies[1:100])), cumSum))+
+  geom_point()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_x_continuous(breaks=seq(0,nrow(unigramFrequencies),10))+xlab("Frequency rank")+ylab("Proportion of tokens covered")
+plotFrequencies
+```
+
+As can be seen in the graph, the three most frequent unigrams account for around 10% of all tokens, and the 100 most frequent unigrams for around 45%.   
+How many of the most frequent unigrams do you need for a 90% coverage?
+```{r, warning=FALSE, cache=TRUE}
+message("The most frequent ", min(which(unigramFrequencies[,cumSum] > 0.9))," unigrams cover 90% of all unigram tokens.")
+```
+
+## Overall N-gram frequencies 
+What are the 10 most frequent unigrams, bigrams, and trigrams overall?
+```{r, warning=FALSE, cache=TRUE, echo=T}
+start.time <- Sys.time()
+unigramFrequencies<-unigramTokens[,.(.N),by=term]%>%arrange(desc(N))
+unigramFrequencies[1:10,]
+bigramFrequencies<-bigramTokens[,.(.N),by=term]%>%arrange(desc(N))
+bigramFrequencies[1:10,]
+trigramFrequencies<-trigramTokens[,.(.N),by=term]%>%arrange(desc(N))
+trigramFrequencies[1:10,]
+```
+# Still to do
+1. Implementing word prediction algorith, based on stupid backoff.
+2. Improve string normalization and tokenizer (the tokenizer seems to have issues with formatting)
+3. Implement Shiny app
