@@ -2,7 +2,7 @@
 
 This repository holds the files for my capstone project. The app is hosted here: [https://saschac.shinyapps.io/shinyAutocomplete/](https://saschac.shinyapps.io/shinyAutocomplete/)
 
-1. /presentation: contains the R files for the presentation of the app [http://rpubs.com/SaschaC/shinyAutomcomplete](http://rpubs.com/SaschaC/shinyAutomcomplete)
+1. /presentation: contains the R files for the presentation of the app [http://rpubs.com/SaschaC/shinyAutocomplete](http://rpubs.com/SaschaC/shinyAutocomplete)
 
 2. /milestoneReport: contains the R markdown files for an exploratory report about the corpus used for the app. The report can be found here: [https://rpubs.com/SaschaC/CourseraCapstoneProject](https://rpubs.com/SaschaC/CourseraCapstoneProject). 
 The corpus can be downloaded [here](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip)
